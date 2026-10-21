@@ -1,9 +1,12 @@
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-STATIC_DIR = Path(__file__).parent.parent / "static"
+STATIC_DIR = os.environ.get(
+    "STATIC_DIR", Path(__file__).parents[2] / "frontend" / "out"
+)
 
 app = FastAPI()
 

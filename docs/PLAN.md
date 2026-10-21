@@ -48,11 +48,11 @@ Status: complete. All success criteria verified, including the scripts on Mac/Li
 
 Now update so that the frontend is statically built and served, so that the app has the demo Kanban board displayed at /. Comprehensive unit and integration tests.
 
-- [ ] Set `output: "export"` in `frontend/next.config.ts`
-- [ ] Make the Dockerfile multi-stage: a Node stage runs `npm ci` and `npm run build`, and the Python stage copies `frontend/out` into the static directory the backend serves
-- [ ] Remove the hello world page
-- [ ] Add card editing, which the requirements ask for and the demo lacks: edit a card's title and details inline, and save or cancel
-- [ ] Point Playwright at the running container (http://localhost:8000) as an option, while keeping the dev server as the default
+- [x] Set `output: "export"` in `frontend/next.config.ts`
+- [x] Make the Dockerfile multi-stage: a Node stage runs `npm ci` and `npm run build`, and the Python stage copies `frontend/out` into the static directory the backend serves (on machines with Norton, HTTPS scanning must exclude `registry.npmjs.org` and `fonts.googleapis.com`, or the build fails TLS verification)
+- [x] Remove the hello world page
+- [x] Add card editing, which the requirements ask for and the demo lacks: edit a card's title and details inline, and save or cancel
+- [x] Point Playwright at the running container (http://localhost:8000) as an option, while keeping the dev server as the default (`BASE_URL` env var)
 
 Tests:
 - Vitest: edit a card's title and details, cancel an edit

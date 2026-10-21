@@ -1,23 +1,33 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
+  MeasuringStrategy,
   PointerSensor,
   useSensor,
   useSensors,
-  closestCorners,
+  pointerWithin,
+  type CollisionDetection,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
+import {
+  createId,
+  findColumnId,
+  initialData,
+  moveCard,
+  type BoardData,
+} from "@/lib/kanban";
 
 export const KanbanBoard = () => {
   const [board, setBoard] = useState<BoardData>(() => initialData);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const dragStartBoard = useRef(board);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -27,8 +37,51 @@ export const KanbanBoard = () => {
 
   const cardsById = useMemo(() => board.cards, [board.cards]);
 
+  // The column under the pointer is the target column. The slot is the number of
+  // other cards in it whose midpoint is above the dragged card's center. Returns
+  // the card currently in that slot (or the column when the slot is the end), so
+  // the sortable preview and moveCard both place the card there.
+  const collisionDetection: CollisionDetection = (args) => {
+    const [columnHit] = pointerWithin({
+      ...args,
+      droppableContainers: args.droppableContainers.filter((container) =>
+        board.columns.some((column) => column.id === container.id)
+      ),
+    });
+    if (!columnHit) {
+      return [];
+    }
+    const column = board.columns.find((c) => c.id === columnHit.id)!;
+    const centerY = args.collisionRect.top + args.collisionRect.height / 2;
+    const slot = column.cardIds.filter((id) => {
+      const rect = args.droppableRects.get(id);
+      return id !== args.active.id && rect && rect.top + rect.height / 2 < centerY;
+    }).length;
+    return [{ id: column.cardIds[slot] ?? column.id }];
+  };
+
   const handleDragStart = (event: DragStartEvent) => {
+    dragStartBoard.current = board;
     setActiveCardId(event.active.id as string);
+  };
+
+  // Move the card into another column as soon as it is dragged over it, so that
+  // column's sortable list opens a gap and previews the drop position.
+  const handleDragOver = ({ active, over }: DragOverEvent) => {
+    if (!over) {
+      return;
+    }
+    setBoard((prev) => {
+      const activeColumnId = findColumnId(prev.columns, active.id as string);
+      const overColumnId = findColumnId(prev.columns, over.id as string);
+      if (activeColumnId === overColumnId) {
+        return prev;
+      }
+      return {
+        ...prev,
+        columns: moveCard(prev.columns, active.id as string, over.id as string),
+      };
+    });
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -43,6 +96,11 @@ export const KanbanBoard = () => {
       ...prev,
       columns: moveCard(prev.columns, active.id as string, over.id as string),
     }));
+  };
+
+  const handleDragCancel = () => {
+    setActiveCardId(null);
+    setBoard(dragStartBoard.current);
   };
 
   const handleRenameColumn = (columnId: string, title: string) => {
@@ -67,6 +125,13 @@ export const KanbanBoard = () => {
           ? { ...column, cardIds: [...column.cardIds, id] }
           : column
       ),
+    }));
+  };
+
+  const handleEditCard = (cardId: string, title: string, details: string) => {
+    setBoard((prev) => ({
+      ...prev,
+      cards: { ...prev.cards, [cardId]: { id: cardId, title, details } },
     }));
   };
 
@@ -135,9 +200,12 @@ export const KanbanBoard = () => {
 
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={collisionDetection}
+          measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
           onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
         >
           <section className="grid gap-6 lg:grid-cols-5">
             {board.columns.map((column) => (
@@ -148,6 +216,7 @@ export const KanbanBoard = () => {
                 onRename={handleRenameColumn}
                 onAddCard={handleAddCard}
                 onDeleteCard={handleDeleteCard}
+                onEditCard={handleEditCard}
               />
             ))}
           </section>

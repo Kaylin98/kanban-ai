@@ -14,4 +14,4 @@ def test_health():
 def test_index():
     response = client.get("/")
     assert response.status_code == 200
-    assert "Hello World" in response.text
+    assert "Test index" in response.text
