@@ -5,9 +5,9 @@ Each part has a checklist of substeps, the tests to write, and success criteria.
 ## Decisions
 
 - Auth: backend cookie session. FastAPI checks the hardcoded credentials (`user` / `password`) and sets a signed session cookie. The board API identifies the user from the cookie.
-- Database: SQLite with a `users` table and a `boards` table. `boards.data` stores the whole board as JSON, in the same `BoardData` shape the frontend uses (`frontend/src/lib/kanban.ts`).
+- Database: SQLite with `users`, `boards`, `columns` and `cards` tables (see `docs/DATABASE.md`). The API sends and receives the board in the `BoardData` shape the frontend uses (`frontend/src/lib/kanban.ts`); the backend maps between rows and that shape.
 - Testing: aim for around 80% coverage where that is sensible, but only write tests that add real value. Falling short of 80% is fine; never add tests just to hit the number. This applies wherever a part below asks for "comprehensive" or "thorough" tests.
-- Open, to decide at Part 9: whether the AI's Structured Output returns a full replacement board or a list of operations.
+- Open, to decide at Part 9: whether the AI's Structured Output returns a full replacement board or a list of operations. A list of operations maps naturally onto the tables; a full replacement board reuses the `PUT /api/board` write path.
 - Open, to decide at Part 10: where chat history lives (frontend state or the database).
 
 ## Part 1: Plan
@@ -86,19 +86,24 @@ Tests:
 
 Success criteria: the board can't be seen without logging in. Login and logout work in the container, and all tests pass.
 
-Status: implemented, awaiting user review. All tests pass (pytest 4, Vitest 12, Playwright 12 locally and against the container). Known environment issue: when several Playwright workers load the same page at once, Chrome's requests sometimes stall in 10 second steps and tests time out. The server answers every request in under 200 ms, curl and Node requests are unaffected, and it happens against both local uvicorn and the container, so the suspect is Norton 360 inspecting Chrome's traffic. With `--workers=1` it never happens.
+Status: complete. Approved by the user. All tests pass (pytest 4, Vitest 12, Playwright 12 locally and against the container). Known environment issue: when several Playwright workers load the same page at once, Chrome's requests sometimes stall in 10 second steps and tests time out. The server answers every request in under 200 ms, curl and Node requests are unaffected, and it happens against both local uvicorn and the container, so the suspect is Norton 360 inspecting Chrome's traffic. With `--workers=1` it never happens.
 
 ## Part 5: Database modeling
 
 Now propose a database schema for the Kanban, saving it as JSON. Document the database approach in docs/ and get user sign off.
 
-- [ ] Write `docs/DATABASE.md` covering:
+- [x] Write `docs/DATABASE.md` covering:
   - `users`: `id` (integer primary key), `username` (unique text)
-  - `boards`: `id` (integer primary key), `user_id` (unique foreign key to users, so one board per user for the MVP), `data` (JSON text in the `BoardData` shape), `updated_at`
-  - A sample of `boards.data` as JSON
+  - `boards`: `id` (integer primary key), `user_id` (unique foreign key to users, so one board per user for the MVP), `updated_at`
+  - `columns`: `id`, `board_id`, `key` (the frontend id), `title`, `position`
+  - `cards`: `id`, `column_id`, `key` (the frontend id), `title`, `details`, `position`
+  - Sample rows and the `BoardData` JSON the API returns for them
+  - How rows map to and from `BoardData` on read, write and create
   - Lifecycle: create the db file and tables on startup if they are missing; seed the `user` row; create a user's board from the default board on first access
   - Location: database file at a path set by an env var, on the Docker volume
-- [ ] User reviews and approves the schema
+- [x] User reviews and approves the schema
+
+Status: complete. Approved by the user.
 
 Success criteria: the user has approved `docs/DATABASE.md`.
 
@@ -106,21 +111,24 @@ Success criteria: the user has approved `docs/DATABASE.md`.
 
 Now add API routes to allow the backend to read and change the Kanban for a given user; test this thoroughly with backend unit tests. The database should be created if it doesn't exist.
 
-- [ ] `backend/app/db.py`: SQLite connection (standard library `sqlite3`), table creation on startup, user seeding
-- [ ] Pydantic models that mirror `BoardData` (`Card`, `Column`, `Board`)
-- [ ] `GET /api/board`: returns the session user's board, creating it from the default board on first access
-- [ ] `PUT /api/board`: validates and saves the full board for the session user
-- [ ] Both routes return 401 without a session
+- [x] `backend/app/db.py`: SQLite connection (standard library `sqlite3`), table creation on startup, user seeding
+- [x] `get_board(user_id)` and `save_board(user_id, board)` in `db.py`, mapping between rows and `BoardData` as described in `docs/DATABASE.md`
+- [x] Pydantic models that mirror `BoardData` (`Card`, `Column`, `Board`)
+- [x] `GET /api/board`: returns the session user's board, creating it from the default board on first access
+- [x] `PUT /api/board`: validates and saves the full board for the session user
+- [x] Both routes return 401 without a session
 
 Tests (pytest, with a temporary database file for each test):
 - The database and tables are created when the file doesn't exist
 - 401 without login
 - The first GET returns the default board
-- PUT then GET returns the saved board
+- PUT then GET returns the saved board, with column and card order preserved
 - An invalid payload returns 422
 - Each user's board is isolated from other users' boards (test with a second user inserted directly)
 
 Success criteria: all backend tests pass, and board data survives a container restart.
+
+Status: implemented, awaiting user review. pytest 18 passed. In the container, a renamed column survived `docker restart`, and the database file is at `/app/data/pm.db` on the `pm-data` volume. `Board` also rejects boards whose columns are not the fixed five, or whose cards are not each in exactly one column, so invalid AI updates in Part 9 get the same 422.
 
 ## Part 7: Frontend + Backend
 
