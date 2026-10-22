@@ -5,6 +5,7 @@ FastAPI app managed with uv (Python 3.14). It serves the API under `/api` and th
 ## Structure
 
 - `app/main.py`: FastAPI app. `GET /api/health` returns `{"status": "ok"}`. Everything else is served from `STATIC_DIR` (default `../frontend/out`, the Next.js static export).
+- Auth: `POST /api/login` checks the hardcoded credentials (`user` / `password`) and stores the username in a signed session cookie (Starlette `SessionMiddleware`, secret from `SESSION_SECRET`, default `dev-secret`). `POST /api/logout` clears it. `GET /api/me` returns `{"username"}` or 401. Use the `current_user` dependency to require a session on other routes.
 - `tests/`: pytest tests that use FastAPI's `TestClient`. `conftest.py` points `STATIC_DIR` at `tests/static` so the tests don't need a frontend build.
 
 ## Commands (run from `backend/`)

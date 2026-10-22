@@ -6,6 +6,7 @@ Each part has a checklist of substeps, the tests to write, and success criteria.
 
 - Auth: backend cookie session. FastAPI checks the hardcoded credentials (`user` / `password`) and sets a signed session cookie. The board API identifies the user from the cookie.
 - Database: SQLite with a `users` table and a `boards` table. `boards.data` stores the whole board as JSON, in the same `BoardData` shape the frontend uses (`frontend/src/lib/kanban.ts`).
+- Testing: aim for around 80% coverage where that is sensible, but only write tests that add real value. Falling short of 80% is fine; never add tests just to hit the number. This applies wherever a part below asks for "comprehensive" or "thorough" tests.
 - Open, to decide at Part 9: whether the AI's Structured Output returns a full replacement board or a list of operations.
 - Open, to decide at Part 10: where chat history lives (frontend state or the database).
 
@@ -64,16 +65,19 @@ Success criteria:
 - After `scripts/start`, the Kanban board works at http://localhost:8000.
 - All unit and e2e tests pass.
 
+Status: complete. Approved by the user.
+
 ## Part 4: Add in a fake user sign in experience
 
 Now update so that on first hitting /, you need to log in with dummy credentials ("user", "password") in order to see the Kanban, and you can log out. Comprehensive tests.
 
-- [ ] Backend: `POST /api/login` checks the credentials and sets a signed session cookie (Starlette `SessionMiddleware`). The secret key comes from an env var, with a dev default.
-- [ ] Backend: `POST /api/logout` clears the session. `GET /api/me` returns the username, or 401.
-- [ ] Frontend: on load, call `/api/me`. Show a login form if there is no session, otherwise show the board.
-- [ ] Frontend: logout button in the header
-- [ ] Frontend: show an error message for wrong credentials
-- [ ] Use the color scheme: purple for the submit button, navy for headings
+- [x] Backend: `POST /api/login` checks the credentials and sets a signed session cookie (Starlette `SessionMiddleware`). The secret key comes from an env var, with a dev default.
+- [x] Backend: `POST /api/logout` clears the session. `GET /api/me` returns the username, or 401.
+- [x] Frontend: on load, call `/api/me`. Show a login form if there is no session, otherwise show the board.
+- [x] Frontend: logout button in the header
+- [x] Frontend: show an error message for wrong credentials
+- [x] Use the color scheme: purple for the submit button, navy for headings
+- [x] Playwright now needs the backend, so by default it builds the frontend and runs uvicorn locally (port 8001) instead of `npm run dev`; `BASE_URL` still targets the container
 
 Tests:
 - pytest: login works with the correct credentials and fails with wrong ones; `/api/me` returns 401 before login and 200 after; logout clears the session
@@ -81,6 +85,8 @@ Tests:
 - Playwright: visit `/`, see the login form, log in, see the board, log out, see the login form again
 
 Success criteria: the board can't be seen without logging in. Login and logout work in the container, and all tests pass.
+
+Status: implemented, awaiting user review. All tests pass (pytest 4, Vitest 12, Playwright 12 locally and against the container). Known environment issue: when several Playwright workers load the same page at once, Chrome's requests sometimes stall in 10 second steps and tests time out. The server answers every request in under 200 ms, curl and Node requests are unaffected, and it happens against both local uvicorn and the container, so the suspect is Norton 360 inspecting Chrome's traffic. With `--workers=1` it never happens.
 
 ## Part 5: Database modeling
 

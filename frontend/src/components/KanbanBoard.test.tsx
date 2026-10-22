@@ -6,12 +6,12 @@ const getFirstColumn = () => screen.getAllByTestId(/column-/i)[0];
 
 describe("KanbanBoard", () => {
   it("renders five columns", () => {
-    render(<KanbanBoard />);
+    render(<KanbanBoard onLogout={() => {}} />);
     expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
   });
 
   it("renames a column", async () => {
-    render(<KanbanBoard />);
+    render(<KanbanBoard onLogout={() => {}} />);
     const column = getFirstColumn();
     const input = within(column).getByLabelText("Column title");
     await userEvent.clear(input);
@@ -20,7 +20,7 @@ describe("KanbanBoard", () => {
   });
 
   it("adds and removes a card", async () => {
-    render(<KanbanBoard />);
+    render(<KanbanBoard onLogout={() => {}} />);
     const column = getFirstColumn();
     const addButton = within(column).getByRole("button", {
       name: /add a card/i,
@@ -45,7 +45,7 @@ describe("KanbanBoard", () => {
   });
 
   it("edits a card", async () => {
-    render(<KanbanBoard />);
+    render(<KanbanBoard onLogout={() => {}} />);
     const card = screen.getByTestId("card-card-1");
     await userEvent.click(
       within(card).getByRole("button", { name: /edit align roadmap themes/i })
@@ -66,7 +66,7 @@ describe("KanbanBoard", () => {
   });
 
   it("cancels editing a card without changes", async () => {
-    render(<KanbanBoard />);
+    render(<KanbanBoard onLogout={() => {}} />);
     const card = screen.getByTestId("card-card-1");
     await userEvent.click(
       within(card).getByRole("button", { name: /edit align roadmap themes/i })

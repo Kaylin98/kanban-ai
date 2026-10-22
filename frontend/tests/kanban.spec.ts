@@ -18,6 +18,13 @@ const dragTo = async (page: Page, cardTestId: string, targetTestId: string, offs
   await page.mouse.move(to.x + to.width / 2, to.y + to.height + offsetY, { steps: 20 });
 };
 
+// page.request shares the browser context's cookies, so this signs the page in.
+test.beforeEach(async ({ page }) => {
+  await page.request.post("/api/login", {
+    data: { username: "user", password: "password" },
+  });
+});
+
 test("loads the kanban board", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
