@@ -176,17 +176,22 @@ Status: implemented, awaiting the container check. Notes:
 
 Now extend the backend call so that it always calls the AI with the JSON of the Kanban board, plus the user's question (and conversation history). The AI should respond with Structured Outputs that includes the response to the user and optionally an update to the Kanban. Test thoroughly.
 
-- [ ] Decide with the user: full replacement board or a list of operations in the Structured Output
-- [ ] `POST /api/chat`: takes the user's message and the conversation history, and requires a session
-- [ ] Build the prompt: a system prompt explaining the board and the rules (columns are fixed, card ids must be unique), the current board JSON, the history and the new message
-- [ ] Define the Pydantic response schema: `reply` (string) plus the optional board update, and pass it as the Structured Output schema
-- [ ] Validate any update, save it, and return `{reply, board}` where `board` is the updated board or null
+- [x] Decide with the user: full replacement board or a list of operations in the Structured Output (decided: a list of operations)
+- [x] `POST /api/chat`: takes the user's message and the conversation history, and requires a session
+- [x] Build the prompt: a system prompt explaining the board and the rules (columns are fixed, card ids must be unique), the current board JSON, the history and the new message
+- [x] Define the Pydantic response schema: `reply` (string) plus a list of create / update / move / delete operations, and pass it as the Structured Output schema
+- [x] Validate any update, save it, and return `{reply, board}` where `board` is the updated board or null
 
 Tests:
 - pytest with the AI call mocked: a reply-only response leaves the board unchanged; an update response saves the board; an invalid update is rejected and the board is left unchanged; 401 without a session
 - pytest (live, skippable): asking it to "add a card called X to Backlog" results in a saved board containing X in Backlog
 
 Success criteria: all tests pass, and a live request can create, edit and move cards.
+
+Status: implemented, awaiting user review. pytest 27 passed (2 live tests skipped without a key). Notes:
+- The server assigns ids to created cards. Unknown card or column ids reject the whole update with 502, the board stays unchanged, and the rejected operations are logged.
+- Live, with dots: a three-message conversation created a card, renamed a card and moved two cards (one to the top of Backlog), all correctly.
+- The live add-card test is flaky: it failed on 2 of its last 4 runs. Each time dots returned an operation for a made-up id ("new-card-1") instead of a create. The logs showed that every rejection came from the model, not from id handling. Two prompt rules fixed the most common mistakes: never refer to a new card in another operation, and return operations only for the latest message.
 
 ## Part 10: AI chat sidebar
 

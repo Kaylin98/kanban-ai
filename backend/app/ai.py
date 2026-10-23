@@ -1,6 +1,7 @@
 import os
 
 from openai import OpenAI
+from pydantic import BaseModel
 
 MODEL = os.environ.get("OPENROUTER_MODEL", "dots-studio/dots-3-note-preview:free")
 # OpenRouter tries these in order when MODEL fails or is down.
@@ -25,3 +26,19 @@ def complete(messages: list[dict]) -> str:
         extra_body={"models": FALLBACK_MODELS},
     )
     return response.choices[0].message.content
+
+
+def parse[T: BaseModel](messages: list[dict], schema: type[T]) -> T:
+    """Returns the reply as `schema`, using Structured Outputs."""
+    response = client().chat.completions.parse(
+        model=MODEL,
+        messages=messages,
+        response_format=schema,
+        max_tokens=MAX_TOKENS,
+        extra_body={
+            "models": FALLBACK_MODELS,
+            # Only route to providers that support Structured Outputs.
+            "provider": {"require_parameters": True},
+        },
+    )
+    return response.choices[0].message.parsed
