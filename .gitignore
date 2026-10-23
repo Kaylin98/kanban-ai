@@ -184,3 +184,7 @@ playwright-report/
 # SQLite
 *.db
 
+
+# Extra CA certs copied in by scripts/start (e.g. Norton)
+certs/*
+!certs/.gitkeep

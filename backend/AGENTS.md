@@ -22,4 +22,4 @@ FastAPI app managed with uv (Python 3.14). It serves the API under `/api` and th
 
 ## Docker
 
-The root `Dockerfile` builds the frontend in a Node stage, then installs the locked Python dependencies with uv and copies the build to `/app/frontend/out`. It runs uvicorn on port 8000. The scripts in `scripts/` build and run it.
+The root `Dockerfile` builds the frontend in a Node stage, then installs the locked Python dependencies with uv and copies the build to `/app/frontend/out`. It runs uvicorn on port 8000. `SSL_CERT_FILE` points at a bundle of the system CAs plus any `certs/*.pem` (for antivirus HTTPS scanning such as Norton; see `scripts/AGENTS.md`). The scripts in `scripts/` build and run it.

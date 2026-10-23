@@ -6,3 +6,5 @@ Start and stop scripts for the Docker container (`pm-app`). Run them from any di
 - `start.ps1` / `stop.ps1`: PC (`powershell -ExecutionPolicy Bypass -File scripts\start.ps1`)
 
 Start builds the image, replaces any running container, and runs it with `--env-file .env` on port 8000 and the named volume `pm-data` mounted at `/app/data` for the database. Stop removes the container (the volume is kept).
+
+If `NODE_EXTRA_CA_CERTS` points to a file (Norton sets it to its HTTPS scanning root), start copies it to `certs/extra-ca.pem` (gitignored) so the container trusts it. Without it, the container uses the system CAs only.
