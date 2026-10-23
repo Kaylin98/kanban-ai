@@ -24,7 +24,7 @@ For the MVP, this will run locally (in a docker container)
 - Everything packaged into a Docker container
 - Use "uv" as the package manager for python in the Docker container
 - Use OpenRouter for the AI calls. An OPENROUTER_API_KEY is in .env in the project root
-- Use `openai/gpt-oss-120b:free` as the model
+- Use `nvidia/nemotron-3-super-120b-a12b:free` as the model, set by OPENROUTER_MODEL in .env. If it is withdrawn or down, use `openrouter/free` (routes to any free model) as the fallback
 - Use SQLLite local database for the database, creating a new db if it doesn't exist
 - Start and Stop server scripts for Mac, PC, Linux in scripts/
 
