@@ -1,6 +1,8 @@
-const post = (url: string, body?: unknown) =>
+import type { BoardData } from "@/lib/kanban";
+
+const send = (url: string, method: string, body?: unknown) =>
   fetch(url, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -13,8 +15,23 @@ export const me = async (): Promise<string | null> => {
 
 // Returns true when the credentials are accepted.
 export const login = async (username: string, password: string) =>
-  (await post("/api/login", { username, password })).ok;
+  (await send("/api/login", "POST", { username, password })).ok;
 
 export const logout = async () => {
-  await post("/api/logout");
+  await send("/api/logout", "POST");
+};
+
+export const getBoard = async (): Promise<BoardData> =>
+  (await fetch("/api/board")).json();
+
+// Saves run one after another. The server handles requests concurrently, so
+// overlapping saves (one per keystroke while renaming a column) could otherwise
+// finish out of order and leave an older board stored.
+let lastSave: Promise<unknown> = Promise.resolve();
+
+export const saveBoard = (board: BoardData) => {
+  lastSave = lastSave
+    .catch(() => {})
+    .then(() => send("/api/board", "PUT", board));
+  return lastSave;
 };

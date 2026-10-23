@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -16,22 +16,27 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import {
-  createId,
-  findColumnId,
-  initialData,
-  moveCard,
-  type BoardData,
-} from "@/lib/kanban";
+import { saveBoard } from "@/lib/api";
+import { createId, findColumnId, moveCard, type BoardData } from "@/lib/kanban";
 
 type KanbanBoardProps = {
+  initialBoard: BoardData;
   onLogout: () => void;
 };
 
-export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
-  const [board, setBoard] = useState<BoardData>(() => initialData);
+export const KanbanBoard = ({ initialBoard, onLogout }: KanbanBoardProps) => {
+  const [board, setBoard] = useState(initialBoard);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const dragStartBoard = useRef(board);
+  const savedBoard = useRef(board);
+
+  // Save every change, except the intermediate states while a card is dragged.
+  useEffect(() => {
+    if (activeCardId === null && board !== savedBoard.current) {
+      savedBoard.current = board;
+      saveBoard(board);
+    }
+  }, [board, activeCardId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {

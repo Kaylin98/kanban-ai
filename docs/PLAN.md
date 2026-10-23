@@ -128,16 +128,16 @@ Tests (pytest, with a temporary database file for each test):
 
 Success criteria: all backend tests pass, and board data survives a container restart.
 
-Status: implemented, awaiting user review. pytest 18 passed. In the container, a renamed column survived `docker restart`, and the database file is at `/app/data/pm.db` on the `pm-data` volume. `Board` also rejects boards whose columns are not the fixed five, or whose cards are not each in exactly one column, so invalid AI updates in Part 9 get the same 422.
+Status: complete. Approved by the user. pytest 18 passed. In the container, a renamed column survived `docker restart`, and the database file is at `/app/data/pm.db` on the `pm-data` volume. `Board` also rejects boards whose columns are not the fixed five, or whose cards are not each in exactly one column, so invalid AI updates in Part 9 get the same 422.
 
 ## Part 7: Frontend + Backend
 
 Now have the frontend actually use the backend API, so that the app is a proper persistent Kanban board. Test very throughly.
 
-- [ ] `frontend/src/lib/api.ts`: small fetch helpers (`getBoard`, `saveBoard`, login, logout, me)
-- [ ] `KanbanBoard` loads the board from `GET /api/board` after login, with a simple loading state
-- [ ] Every change (move, rename, add, edit, delete) updates local state and saves it with `PUT /api/board`
-- [ ] Remove the use of `initialData` from the frontend; the backend owns the default board
+- [x] `frontend/src/lib/api.ts`: small fetch helpers (`getBoard`, `saveBoard`, login, logout, me)
+- [x] The board is loaded from `GET /api/board` after login, with a simple loading state (done in `page.tsx`, which passes it to `KanbanBoard` as `initialBoard`)
+- [x] Every change (move, rename, add, edit, delete) updates local state and saves it with `PUT /api/board`
+- [x] Remove the use of `initialData` from the frontend; the backend owns the default board (a copy stays as a test fixture in `src/test/board.ts`)
 
 Tests:
 - Vitest: the board renders from a mocked API response; each change type calls `saveBoard` with the expected board
@@ -145,6 +145,11 @@ Tests:
 - Manual check: stop and start the container, and the changes are still there
 
 Success criteria: the board persists across reloads and container restarts, and all tests pass.
+
+Status: complete. Approved by the user. Vitest 12, Playwright 13 (locally, in parallel and with one worker, and against the container), pytest 18. A change saved before `scripts/stop` was still there after `scripts/start` recreated the container. Notes:
+- The move-card unit test is not in Vitest, because dnd-kit drags don't work in jsdom. The Playwright reload test covers it.
+- Saves are queued in `saveBoard`. The backend handles requests concurrently, so the per-keystroke saves while renaming a column could otherwise finish out of order.
+- Local Playwright runs use a database in the temp directory. Against the container (`BASE_URL`), the tests reset that user's board.
 
 ## Part 8: AI connectivity
 

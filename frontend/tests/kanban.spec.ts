@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { defaultBoard } from "../src/test/board";
 
 const cardIds = (page: Page, columnId: string) =>
   page
@@ -18,11 +19,19 @@ const dragTo = async (page: Page, cardTestId: string, targetTestId: string, offs
   await page.mouse.move(to.x + to.width / 2, to.y + to.height + offsetY, { steps: 20 });
 };
 
+// Resolves when the board has been saved. Start waiting before the change.
+const boardSaved = (page: Page) =>
+  page.waitForResponse(
+    (response) => response.url().endsWith("/api/board") && response.request().method() === "PUT"
+  );
+
 // page.request shares the browser context's cookies, so this signs the page in.
+// The board is stored on the server, so reset it to the default before each test.
 test.beforeEach(async ({ page }) => {
   await page.request.post("/api/login", {
     data: { username: "user", password: "password" },
   });
+  await page.request.put("/api/board", { data: defaultBoard });
 });
 
 test("loads the kanban board", async ({ page }) => {
@@ -88,6 +97,46 @@ test("moves a card between columns", async ({ page }) => {
   );
   await page.mouse.up();
   await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
+});
+
+test("keeps every change after a reload", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto("/");
+
+  let saved = boardSaved(page);
+  await page.getByTestId("column-col-backlog").getByLabel("Column title").fill("Ideas");
+  await saved;
+
+  const backlog = page.getByTestId("column-col-backlog");
+  await backlog.getByRole("button", { name: /add a card/i }).click();
+  await backlog.getByPlaceholder("Card title").fill("Persisted card");
+  await backlog.getByPlaceholder("Details").fill("Still here.");
+  saved = boardSaved(page);
+  await backlog.getByRole("button", { name: /add card/i }).click();
+  await saved;
+
+  const card = page.getByTestId("card-card-2");
+  await card.getByRole("button", { name: /edit gather customer signals/i }).click();
+  await card.getByLabel("Card title").fill("Edited and saved");
+  saved = boardSaved(page);
+  await card.getByRole("button", { name: /save/i }).click();
+  await saved;
+
+  saved = boardSaved(page);
+  await page.getByTestId("card-card-6").getByRole("button", { name: /delete/i }).click();
+  await saved;
+
+  saved = boardSaved(page);
+  await dragTo(page, "card-card-1", "card-card-7", 20);
+  await page.mouse.up();
+  await saved;
+
+  await page.reload();
+  await expect(page.getByTestId("column-col-backlog").getByLabel("Column title")).toHaveValue("Ideas");
+  await expect(backlog.getByText("Persisted card")).toBeVisible();
+  await expect(page.getByTestId("card-card-2").getByText("Edited and saved")).toBeVisible();
+  await expect(page.getByTestId("card-card-6")).toHaveCount(0);
+  expect(await cardIds(page, "column-col-done")).toEqual(["card-card-7", "card-card-1", "card-card-8"]);
 });
 
 test.describe("drop position", () => {
