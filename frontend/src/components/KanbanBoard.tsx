@@ -14,6 +14,7 @@ import {
   type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { ChatWidget } from "@/components/ChatWidget";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { saveBoard } from "@/lib/api";
@@ -163,21 +164,27 @@ export const KanbanBoard = ({ initialBoard, onLogout }: KanbanBoardProps) => {
     });
   };
 
+  // The server has already saved the AI's board, so mark it saved before showing it.
+  const handleAIBoardUpdate = (aiBoard: BoardData) => {
+    savedBoard.current = aiBoard;
+    setBoard(aiBoard);
+  };
+
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
 
   return (
-    <div className="relative overflow-hidden">
+    <div className="relative overflow-clip">
       <div className="pointer-events-none absolute left-0 top-0 h-[420px] w-[420px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,_rgba(32,157,215,0.25)_0%,_rgba(32,157,215,0.05)_55%,_transparent_70%)]" />
       <div className="pointer-events-none absolute bottom-0 right-0 h-[520px] w-[520px] translate-x-1/4 translate-y-1/4 rounded-full bg-[radial-gradient(circle,_rgba(117,57,145,0.18)_0%,_rgba(117,57,145,0.05)_55%,_transparent_75%)]" />
 
-      <main className="relative mx-auto flex min-h-screen max-w-[1500px] flex-col gap-10 px-6 pb-16 pt-12">
-        <header className="flex flex-col gap-6 rounded-[32px] border border-[var(--stroke)] bg-white/80 p-8 shadow-[var(--shadow)] backdrop-blur">
+      <main className="relative mx-auto flex min-h-screen max-w-[1500px] flex-col gap-8 px-4 pb-28 pt-6 sm:gap-10 sm:px-6 sm:pt-12">
+        <header className="flex flex-col gap-6 rounded-[32px] border border-[var(--stroke)] bg-white/80 p-6 shadow-[var(--shadow)] backdrop-blur sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
                 Single Board Kanban
               </p>
-              <h1 className="mt-3 font-display text-4xl font-semibold text-[var(--navy-dark)]">
+              <h1 className="mt-3 font-display text-3xl font-semibold text-[var(--navy-dark)] sm:text-4xl">
                 Kanban Studio
               </h1>
               <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--gray-text)]">
@@ -186,7 +193,7 @@ export const KanbanBoard = ({ initialBoard, onLogout }: KanbanBoardProps) => {
               </p>
             </div>
             <div className="flex items-start gap-4">
-              <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
+              <div className="hidden rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4 md:block">
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
                   Focus
                 </p>
@@ -203,7 +210,8 @@ export const KanbanBoard = ({ initialBoard, onLogout }: KanbanBoardProps) => {
               </button>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-4">
+          {/* Hidden on phones, where it wraps onto several rows and repeats the column titles. */}
+          <div className="hidden flex-wrap items-center gap-3 sm:flex">
             {board.columns.map((column) => (
               <div
                 key={column.id}
@@ -225,7 +233,10 @@ export const KanbanBoard = ({ initialBoard, onLogout }: KanbanBoardProps) => {
           onDragEnd={handleDragEnd}
           onDragCancel={handleDragCancel}
         >
-          <section className="grid gap-6 lg:grid-cols-5">
+          {/* Columns never get narrower than 260px: on smaller screens the board scrolls
+              sideways. The padding (offset by negative margins) keeps the column shadows
+              and the drop ring from being clipped by the scroll container. */}
+          <section className="-mx-4 -mb-10 -mt-2 grid grid-cols-[repeat(5,minmax(260px,1fr))] gap-4 overflow-x-auto px-4 pb-10 pt-2 sm:-mx-6 sm:gap-6 sm:px-6">
             {board.columns.map((column) => (
               <KanbanColumn
                 key={column.id}
@@ -238,15 +249,13 @@ export const KanbanBoard = ({ initialBoard, onLogout }: KanbanBoardProps) => {
               />
             ))}
           </section>
+          {/* DragOverlay sizes itself to the dragged card. */}
           <DragOverlay>
-            {activeCard ? (
-              <div className="w-[260px]">
-                <KanbanCardPreview card={activeCard} />
-              </div>
-            ) : null}
+            {activeCard ? <KanbanCardPreview card={activeCard} /> : null}
           </DragOverlay>
         </DndContext>
       </main>
+      <ChatWidget onBoardUpdate={handleAIBoardUpdate} />
     </div>
   );
 };

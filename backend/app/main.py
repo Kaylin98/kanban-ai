@@ -5,7 +5,8 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from openai import OpenAIError
+from pydantic import BaseModel, ValidationError
 from starlette.middleware.sessions import SessionMiddleware
 
 from app import ai, db
@@ -24,6 +25,8 @@ STATIC_DIR = os.environ.get(
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "dev-secret")
 
 logger = logging.getLogger(__name__)
+# uvicorn only configures its own loggers, so without this the app's INFO logs are dropped.
+logging.basicConfig(level=logging.INFO)
 
 # Hardcoded for the MVP.
 USERNAME = "user"
@@ -102,17 +105,22 @@ def chat(request: ChatRequest, user_id: int = Depends(current_user_id)) -> ChatR
     messages = build_messages(board, request)
     # The first attempt, then one retry where the model sees the error and corrects itself.
     for attempt in range(2):
-        response = ai.parse(messages, AIResponse)
+        try:
+            response = ai.parse(messages, AIResponse)
+        except (OpenAIError, ValidationError) as error:
+            # e.g. OpenRouter is down, the reply was cut off at MAX_TOKENS, or it isn't valid JSON.
+            logger.warning("AI call failed: %r", error)
+            raise HTTPException(status_code=502, detail="The AI call failed")
+        logger.info(
+            "AI operations on attempt %d: %s",
+            attempt + 1,
+            [operation.model_dump() for operation in response.operations],
+        )
         try:
             updated = apply_operations(board, response.operations)
             break
         except ValueError as error:
-            logger.warning(
-                "Rejected AI operations on attempt %d (%s): %s",
-                attempt + 1,
-                error,
-                [operation.model_dump() for operation in response.operations],
-            )
+            logger.warning("Rejected AI operations on attempt %d: %s", attempt + 1, error)
             if attempt == 1:
                 raise HTTPException(
                     status_code=502, detail=f"The AI returned an invalid update: {error}"

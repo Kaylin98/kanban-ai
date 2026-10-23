@@ -16,29 +16,33 @@ class ChatRequest(BaseModel):
     history: list[Message]
 
 
+# Each operation's discriminator is `action` because it sorts before the other keys.
+# Providers can generate Structured Output keys in alphabetical order, and a later
+# discriminator (it was `type`) let the key order pick the operation: an update
+# that started with "card_id" could only continue as a delete.
 class CreateCard(BaseModel):
-    type: Literal["create"]
+    action: Literal["create"]
     column_id: str
     title: str
     details: str
 
 
 class UpdateCard(BaseModel):
-    type: Literal["update"]
+    action: Literal["update"]
     card_id: str
     title: str
     details: str
 
 
 class MoveCard(BaseModel):
-    type: Literal["move"]
+    action: Literal["move"]
     card_id: str
     column_id: str
     position: int
 
 
 class DeleteCard(BaseModel):
-    type: Literal["delete"]
+    action: Literal["delete"]
     card_id: str
 
 
@@ -55,15 +59,17 @@ The board is JSON: "columns" is the ordered list of columns, each with an id, a 
 The columns are fixed: you cannot add, remove or rename them.
 
 To change the board, return operations, applied in order:
-- create: add a card at the bottom of column_id. The server assigns its id, so never refer \
-to a new card in another operation
+- create: add a new card at the bottom of column_id. The server assigns its id, so never \
+refer to a new card in another operation
 - update: set a card's title and details (repeat the current value for any you keep)
 - move: move a card to column_id at position (0 is the top)
 - delete: remove a card
+To change a card's column, always use move with the existing card id, never create a copy. \
 Use the exact column and card ids from the board below. Return operations only for the \
 user's latest message: earlier messages are already applied to the board below. Never repeat \
 an operation. Return an empty operations list when the user does not ask for a change. \
-Always write a short reply to the user saying what you did.
+Always write a short reply to the user saying what you did, in plain text: no Markdown, \
+so no **bold**, headings or tables.
 
 The current board:
 {board}"""
@@ -117,6 +123,14 @@ def apply_operations(board: Board, operations: list) -> Board:
     for op in operations:
         match op:
             case CreateCard():
+                # Catches the model copying cards into a column instead of moving them.
+                for existing in cards.values():
+                    if existing["title"].casefold() == op.title.casefold():
+                        raise ValueError(
+                            f'card "{op.title}" already exists as {existing["id"]}. To put an '
+                            "existing card in another column, use a move operation with its "
+                            "card_id; never create a copy"
+                        )
                 card = Card(id=f"card-{uuid4().hex[:12]}", title=op.title, details=op.details)
                 card_ids(op.column_id).append(card.id)
                 cards[card.id] = card.model_dump()

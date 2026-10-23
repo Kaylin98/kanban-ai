@@ -84,16 +84,14 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
           </div>
         </form>
       ) : (
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h4 className="font-display text-base font-semibold text-[var(--navy-dark)]">
-              {card.title}
-            </h4>
-            <p className="mt-2 text-sm leading-6 text-[var(--gray-text)]">
-              {card.details}
-            </p>
-          </div>
-          <div className="flex flex-col items-end gap-1">
+        <>
+          <h4 className="font-display text-base font-semibold leading-6 text-[var(--navy-dark)] wrap-break-word">
+            {card.title}
+          </h4>
+          <p className="mt-1.5 text-sm leading-6 text-[var(--gray-text)] wrap-break-word">
+            {card.details}
+          </p>
+          <div className="-mx-2 mt-2 flex gap-1">
             <button
               type="button"
               onClick={startEditing}
@@ -111,7 +109,7 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
               Remove
             </button>
           </div>
-        </div>
+        </>
       )}
     </article>
   );

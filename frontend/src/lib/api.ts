@@ -35,3 +35,26 @@ export const saveBoard = (board: BoardData) => {
     .then(() => send("/api/board", "PUT", board));
   return lastSave;
 };
+
+export type ChatMessage = { role: "user" | "assistant"; content: string };
+
+export class ChatRequestError extends Error {
+  constructor(readonly status: number) {
+    super(`Chat request failed with ${status}`);
+  }
+}
+
+// Waits for queued saves first, so the AI sees the latest board. `board` is the
+// board the AI changed and the server saved, or null when nothing changed.
+// Throws ChatRequestError when the request fails (502 when the AI call fails).
+export const sendChat = async (
+  message: string,
+  history: ChatMessage[]
+): Promise<{ reply: string; board: BoardData | null }> => {
+  await lastSave.catch(() => {});
+  const response = await send("/api/chat", "POST", { message, history });
+  if (!response.ok) {
+    throw new ChatRequestError(response.status);
+  }
+  return response.json();
+};

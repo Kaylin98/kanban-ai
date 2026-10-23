@@ -6,7 +6,9 @@ from pydantic import BaseModel
 MODEL = os.environ.get("OPENROUTER_MODEL", "dots-studio/dots-3-note-preview:free")
 # OpenRouter tries these in order when MODEL fails or is down.
 FALLBACK_MODELS = ["nvidia/nemotron-3-super-120b-a12b:free"]
-MAX_TOKENS = 2000
+# Reasoning tokens count towards MAX_TOKENS, so ask both models (which support it) for little.
+REASONING = {"effort": "low"}
+MAX_TOKENS = 4000
 
 
 def client() -> OpenAI:
@@ -23,7 +25,7 @@ def complete(messages: list[dict]) -> str:
         model=MODEL,
         messages=messages,
         max_tokens=MAX_TOKENS,
-        extra_body={"models": FALLBACK_MODELS},
+        extra_body={"models": FALLBACK_MODELS, "reasoning": REASONING},
     )
     return response.choices[0].message.content
 
@@ -37,6 +39,7 @@ def parse[T: BaseModel](messages: list[dict], schema: type[T]) -> T:
         max_tokens=MAX_TOKENS,
         extra_body={
             "models": FALLBACK_MODELS,
+            "reasoning": REASONING,
             # Only route to providers that support Structured Outputs.
             "provider": {"require_parameters": True},
         },

@@ -9,6 +9,9 @@ const baseURL = process.env.BASE_URL;
 
 export default defineConfig({
   testDir: "./tests",
+  // Every spec signs in as the one user and resets that user's board, so specs
+  // running in parallel would overwrite each other's board.
+  workers: 1,
   timeout: 60_000,
   expect: {
     timeout: 10_000,

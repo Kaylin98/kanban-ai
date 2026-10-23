@@ -1,11 +1,11 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { KanbanBoard } from "@/components/KanbanBoard";
-import { saveBoard } from "@/lib/api";
+import { saveBoard, sendChat } from "@/lib/api";
 import type { BoardData } from "@/lib/kanban";
 import { defaultBoard } from "@/test/board";
 
-vi.mock("@/lib/api", () => ({ saveBoard: vi.fn() }));
+vi.mock("@/lib/api", () => ({ saveBoard: vi.fn(), sendChat: vi.fn() }));
 
 const getFirstColumn = () => screen.getAllByTestId(/column-/i)[0];
 
@@ -16,6 +16,7 @@ const lastSaved = (): BoardData => vi.mocked(saveBoard).mock.lastCall![0];
 
 afterEach(() => {
   vi.mocked(saveBoard).mockClear();
+  localStorage.clear();
 });
 
 describe("KanbanBoard", () => {
@@ -87,6 +88,25 @@ describe("KanbanBoard", () => {
       title: "Edited title",
       details: "Edited details",
     });
+  });
+
+  it("shows the board from an AI reply without saving it again", async () => {
+    const aiBoard: BoardData = {
+      columns: defaultBoard.columns.map((column) =>
+        column.id === "col-backlog" ? { ...column, cardIds: [...column.cardIds, "card-ai"] } : column
+      ),
+      cards: { ...defaultBoard.cards, "card-ai": { id: "card-ai", title: "From AI", details: "" } },
+    };
+    vi.mocked(sendChat).mockResolvedValue({ reply: "Added it.", board: aiBoard });
+    renderBoard();
+
+    await userEvent.click(screen.getByRole("button", { name: "Open AI assistant" }));
+    await userEvent.type(screen.getByLabelText("Message"), "Add a card");
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await within(getFirstColumn()).findByText("From AI")).toBeInTheDocument();
+    expect(screen.getByText("Added it.")).toBeInTheDocument();
+    expect(saveBoard).not.toHaveBeenCalled();
   });
 
   it("cancels editing a card without changes or saving", async () => {
