@@ -77,20 +77,39 @@ def build_messages(board: Board, request: ChatRequest) -> list[dict]:
     ]
 
 
+def correction_messages(response: AIResponse, error: ValueError) -> list[dict]:
+    """Messages that show the model its rejected response and ask it to correct it."""
+    return [
+        {"role": "assistant", "content": response.model_dump_json()},
+        {
+            "role": "user",
+            "content": f"Your operations were rejected, so nothing was applied: {error}. "
+            "Return the full corrected list of operations for my previous message.",
+        },
+    ]
+
+
 def apply_operations(board: Board, operations: list) -> Board:
     """Returns a new board with the operations applied. Raises ValueError for unknown ids."""
     data = board.model_dump()
     cards = data["cards"]
 
+    def check_card(card_id: str) -> None:
+        if card_id not in cards:
+            raise ValueError(
+                f"card {card_id} does not exist. Use a create operation to add a new card, "
+                "and never refer to a new card in another operation"
+            )
+
     def card_ids(column_id: str) -> list[str]:
         for column in data["columns"]:
             if column["id"] == column_id:
                 return column["cardIds"]
-        raise ValueError(f"Unknown column {column_id}")
+        column_ids = ", ".join(column["id"] for column in data["columns"])
+        raise ValueError(f"column {column_id} does not exist. The columns are {column_ids}")
 
     def take_card(card_id: str) -> None:
-        if card_id not in cards:
-            raise ValueError(f"Unknown card {card_id}")
+        check_card(card_id)
         for column in data["columns"]:
             if card_id in column["cardIds"]:
                 column["cardIds"].remove(card_id)
@@ -102,8 +121,7 @@ def apply_operations(board: Board, operations: list) -> Board:
                 card_ids(op.column_id).append(card.id)
                 cards[card.id] = card.model_dump()
             case UpdateCard():
-                if op.card_id not in cards:
-                    raise ValueError(f"Unknown card {op.card_id}")
+                check_card(op.card_id)
                 cards[op.card_id].update(title=op.title, details=op.details)
             case MoveCard():
                 target = card_ids(op.column_id)

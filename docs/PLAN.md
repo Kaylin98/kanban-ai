@@ -7,8 +7,8 @@ Each part has a checklist of substeps, the tests to write, and success criteria.
 - Auth: backend cookie session. FastAPI checks the hardcoded credentials (`user` / `password`) and sets a signed session cookie. The board API identifies the user from the cookie.
 - Database: SQLite with `users`, `boards`, `columns` and `cards` tables (see `docs/DATABASE.md`). The API sends and receives the board in the `BoardData` shape the frontend uses (`frontend/src/lib/kanban.ts`); the backend maps between rows and that shape.
 - Testing: aim for around 80% coverage where that is sensible, but only write tests that add real value. Falling short of 80% is fine; never add tests just to hit the number. This applies wherever a part below asks for "comprehensive" or "thorough" tests.
-- Open, to decide at Part 9: whether the AI's Structured Output returns a full replacement board or a list of operations. A list of operations maps naturally onto the tables; a full replacement board reuses the `PUT /api/board` write path.
-- Open, to decide at Part 10: where chat history lives (frontend state or the database).
+- AI updates: the Structured Output returns a list of card operations (create / update / move / delete), decided at Part 9.
+- Chat history: frontend state only, sent with each `/api/chat` request and lost on refresh. No database table for the MVP (decided at Part 10).
 
 ## Part 1: Plan
 
@@ -181,23 +181,25 @@ Now extend the backend call so that it always calls the AI with the JSON of the 
 - [x] Build the prompt: a system prompt explaining the board and the rules (columns are fixed, card ids must be unique), the current board JSON, the history and the new message
 - [x] Define the Pydantic response schema: `reply` (string) plus a list of create / update / move / delete operations, and pass it as the Structured Output schema
 - [x] Validate any update, save it, and return `{reply, board}` where `board` is the updated board or null
+- [x] One self-correction retry: if an operation is rejected, send the model its response and the exact error and ask for a corrected list. If the retry also fails, return 502
 
 Tests:
-- pytest with the AI call mocked: a reply-only response leaves the board unchanged; an update response saves the board; an invalid update is rejected and the board is left unchanged; 401 without a session
+- pytest with the AI call mocked: a reply-only response leaves the board unchanged; an update response saves the board; an invalid update that is corrected on the retry is saved; an update that is invalid twice is rejected and the board is left unchanged; 401 without a session
 - pytest (live, skippable): asking it to "add a card called X to Backlog" results in a saved board containing X in Backlog
 
 Success criteria: all tests pass, and a live request can create, edit and move cards.
 
-Status: implemented, awaiting user review. pytest 27 passed (2 live tests skipped without a key). Notes:
-- The server assigns ids to created cards. Unknown card or column ids reject the whole update with 502, the board stays unchanged, and the rejected operations are logged.
+Status: complete, approved by the user. pytest 28 passed (2 live tests skipped without a key). Notes:
+- The server assigns ids to created cards. Unknown card or column ids reject the whole update, and the rejected operations are logged. The model then gets one retry with the error (e.g. "card new-card-1 does not exist. Use a create operation to add a new card..."). If the retry is also invalid, the response is 502 and the board stays unchanged.
 - Live, with dots: a three-message conversation created a card, renamed a card and moved two cards (one to the top of Backlog), all correctly.
 - The live add-card test is flaky: it failed on 2 of its last 4 runs. Each time dots returned an operation for a made-up id ("new-card-1") instead of a create. The logs showed that every rejection came from the model, not from id handling. Two prompt rules fixed the most common mistakes: never refer to a new card in another operation, and return operations only for the latest message.
+- After adding the retry, the live add-card test passed 4 of 4 runs. None of the runs needed the retry (no rejections were logged), so the retry has not yet been exercised live.
 
 ## Part 10: AI chat sidebar
 
 Now add a beautiful sidebar widget to the UI supporting full AI chat, and allowing the LLM (as it determines) to update the Kanban based on its Structured Outputs. If the AI updates the Kanban, then the UI should refresh automatically.
 
-- [ ] Decide with the user where chat history lives
+- [x] Decide with the user where chat history lives (decided: frontend state only, sent with each `/api/chat` request and lost on refresh; no database table for the MVP)
 - [ ] `ChatSidebar` component: message list, input, send button (purple), loading state, using the project color scheme
 - [ ] Sending posts to `/api/chat` with the history, and appends the reply
 - [ ] When the response includes a board, replace the board state so the UI refreshes

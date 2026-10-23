@@ -14,16 +14,16 @@ HISTORY = [
 
 @pytest.fixture
 def fake_ai(monkeypatch):
-    """Replaces the AI call. Set `.response` to the AIResponse dict to return;
-    `.messages` records what was sent."""
+    """Replaces the AI call. Set `.responses` to the AIResponse dicts to return, one per
+    call (the last one repeats); `.calls` records the messages sent on each call."""
 
     class Fake:
-        response = {"reply": "Done.", "operations": []}
-        messages = None
+        responses = [{"reply": "Done.", "operations": []}]
+        calls = []
 
     def parse(messages, schema):
-        Fake.messages = messages
-        return schema.model_validate(Fake.response)
+        Fake.calls.append(list(messages))
+        return schema.model_validate(Fake.responses[min(len(Fake.calls), len(Fake.responses)) - 1])
 
     monkeypatch.setattr(ai, "parse", parse)
     return Fake
@@ -40,7 +40,8 @@ def test_chat_requires_login(client, fake_ai):
 def test_prompt_has_board_history_and_message(logged_in, fake_ai):
     send(logged_in, "What is in Review?")
 
-    system, *history, last = fake_ai.messages
+    [messages] = fake_ai.calls
+    system, *history, last = messages
     assert system["role"] == "system"
     board_json = system["content"].split("The current board:\n")[1]
     assert json.loads(board_json) == DEFAULT_BOARD.model_dump()
@@ -49,7 +50,7 @@ def test_prompt_has_board_history_and_message(logged_in, fake_ai):
 
 
 def test_reply_only_leaves_board_unchanged(logged_in, fake_ai):
-    fake_ai.response = {"reply": "You have 8 cards.", "operations": []}
+    fake_ai.responses = [{"reply": "You have 8 cards.", "operations": []}]
 
     response = send(logged_in)
 
@@ -58,7 +59,7 @@ def test_reply_only_leaves_board_unchanged(logged_in, fake_ai):
 
 
 def test_operations_update_and_save_board(logged_in, fake_ai):
-    fake_ai.response = {
+    fake_ai.responses = [{
         "reply": "Updated.",
         "operations": [
             {"type": "create", "column_id": "col-review", "title": "New", "details": "Fresh"},
@@ -67,7 +68,7 @@ def test_operations_update_and_save_board(logged_in, fake_ai):
             {"type": "move", "card_id": "card-5", "column_id": "col-progress", "position": 0},
             {"type": "delete", "card_id": "card-6"},
         ],
-    }
+    }]
 
     response = send(logged_in).json()
 
@@ -94,14 +95,35 @@ def test_operations_update_and_save_board(logged_in, fake_ai):
         {"type": "delete", "card_id": "card-missing"},
     ],
 )
-def test_invalid_operation_leaves_board_unchanged(logged_in, fake_ai, operation, caplog):
+def test_invalid_operation_twice_leaves_board_unchanged(logged_in, fake_ai, operation, caplog):
     valid = {"type": "delete", "card_id": "card-1"}
-    fake_ai.response = {"reply": "Done.", "operations": [valid, operation]}
+    fake_ai.responses = [{"reply": "Done.", "operations": [valid, operation]}]
 
     assert send(logged_in).status_code == 502
+    assert len(fake_ai.calls) == 2
     assert logged_in.get("/api/board").json() == DEFAULT_BOARD.model_dump()
-    assert "Rejected AI operations" in caplog.text
+    assert "Rejected AI operations on attempt 2" in caplog.text
     assert repr(operation["type"]) in caplog.text
+
+
+def test_invalid_operation_is_corrected_on_retry(logged_in, fake_ai):
+    create = {"type": "create", "column_id": "col-done", "title": "New", "details": ""}
+    invalid = {"type": "move", "card_id": "new-card-1", "column_id": "col-done", "position": 0}
+    fake_ai.responses = [
+        {"reply": "Added.", "operations": [create, invalid]},
+        {"reply": "Added.", "operations": [create]},
+    ]
+
+    response = send(logged_in).json()
+
+    first, retry = fake_ai.calls
+    rejected, correction = retry[len(first):]
+    assert json.loads(rejected["content"]) == fake_ai.responses[0]
+    assert "card new-card-1 does not exist" in correction["content"]
+    done = next(column for column in response["board"]["columns"] if column["id"] == "col-done")
+    assert done["cardIds"][:2] == ["card-7", "card-8"]
+    assert len(done["cardIds"]) == 3
+    assert logged_in.get("/api/board").json() == response["board"]
 
 
 @pytest.mark.skipif(

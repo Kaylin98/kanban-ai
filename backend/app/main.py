@@ -10,7 +10,13 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app import ai, db
 from app.board import Board
-from app.chat import AIResponse, ChatRequest, apply_operations, build_messages
+from app.chat import (
+    AIResponse,
+    ChatRequest,
+    apply_operations,
+    build_messages,
+    correction_messages,
+)
 
 STATIC_DIR = os.environ.get(
     "STATIC_DIR", Path(__file__).parents[2] / "frontend" / "out"
@@ -93,20 +99,29 @@ def update_board(board: Board, user_id: int = Depends(current_user_id)) -> Board
 @app.post("/api/chat")
 def chat(request: ChatRequest, user_id: int = Depends(current_user_id)) -> ChatResponse:
     board = db.get_board(user_id)
-    response = ai.parse(build_messages(board, request), AIResponse)
+    messages = build_messages(board, request)
+    # The first attempt, then one retry where the model sees the error and corrects itself.
+    for attempt in range(2):
+        response = ai.parse(messages, AIResponse)
+        try:
+            updated = apply_operations(board, response.operations)
+            break
+        except ValueError as error:
+            logger.warning(
+                "Rejected AI operations on attempt %d (%s): %s",
+                attempt + 1,
+                error,
+                [operation.model_dump() for operation in response.operations],
+            )
+            if attempt == 1:
+                raise HTTPException(
+                    status_code=502, detail=f"The AI returned an invalid update: {error}"
+                )
+            messages += correction_messages(response, error)
     if not response.operations:
         return ChatResponse(reply=response.reply, board=None)
-    try:
-        board = apply_operations(board, response.operations)
-    except ValueError as error:
-        logger.warning(
-            "Rejected AI operations (%s): %s",
-            error,
-            [operation.model_dump() for operation in response.operations],
-        )
-        raise HTTPException(status_code=502, detail=f"The AI returned an invalid update: {error}")
-    db.save_board(user_id, board)
-    return ChatResponse(reply=response.reply, board=board)
+    db.save_board(user_id, updated)
+    return ChatResponse(reply=response.reply, board=updated)
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
