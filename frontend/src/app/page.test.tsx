@@ -11,12 +11,14 @@ const storedBoard = {
 
 // Fakes the backend API: a session cookie stands in as `signedIn`. The board
 // response waits for `boardReady`, which resolves immediately by default.
+// Signing in with "limited" as the password answers as the rate limit would.
 const mockApi = (signedIn: boolean, boardReady = Promise.resolve()) => {
   vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
     if (url === "/api/login") {
       const { password } = JSON.parse(init!.body as string);
       signedIn = password === "password";
-      return Response.json({}, { status: signedIn ? 200 : 401 });
+      const status = signedIn ? 200 : password === "limited" ? 429 : 401;
+      return Response.json({}, { status });
     }
     if (url === "/api/logout") {
       signedIn = false;
@@ -66,6 +68,13 @@ describe("Home", () => {
     await signIn("wrong");
     expect(await screen.findByRole("alert")).toHaveTextContent(/invalid/i);
     expect(screen.queryByRole("heading", { name: "Kanban Studio" })).not.toBeInTheDocument();
+  });
+
+  it("shows an error when sign-in attempts are rate limited", async () => {
+    mockApi(false);
+    render(<Home />);
+    await signIn("limited");
+    expect(await screen.findByRole("alert")).toHaveTextContent(/too many sign-in attempts/i);
   });
 
   it("signs in and out", async () => {

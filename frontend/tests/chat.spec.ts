@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { defaultBoard } from "../src/test/board";
+import { PASSWORD, USERNAME } from "./credentials";
 
 test.beforeEach(async ({ page }) => {
   await page.request.post("/api/login", {
-    data: { username: "user", password: "password" },
+    data: { username: USERNAME, password: PASSWORD },
   });
   await page.request.put("/api/board", { data: defaultBoard });
 });

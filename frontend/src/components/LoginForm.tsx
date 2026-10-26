@@ -8,14 +8,19 @@ type LoginFormProps = {
 export const LoginForm = ({ onLogin }: LoginFormProps) => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (await login(username, password)) {
+    const status = await login(username, password);
+    if (status === 200) {
       onLogin(username);
     } else {
-      setError(true);
+      setError(
+        status === 429
+          ? "Too many sign-in attempts. Try again in 15 minutes."
+          : "Invalid username or password."
+      );
     }
   };
 
@@ -57,7 +62,7 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
         />
         {error && (
           <p role="alert" className="text-sm font-medium text-red-600">
-            Invalid username or password.
+            {error}
           </p>
         )}
         <button

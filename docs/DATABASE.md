@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS cards (
 );
 ```
 
-- `users` has no password column. Credentials stay hardcoded for the MVP; the table exists so boards belong to a user and more users can be added later.
+- `users` has no password column. The one account comes from the environment (`APP_USERNAME`, and an argon2 `APP_PASSWORD_HASH`); the table exists so boards belong to a user and more users can be added later.
 - `boards.user_id` is unique, so each user has at most one board. Dropping that constraint is all it takes to allow several boards per user later.
 - `boards.updated_at` is an ISO 8601 UTC timestamp, set on every save.
 - `key` holds the id the frontend uses (`col-backlog`, `card-1`). Every user's default board has the same keys, so keys can't be primary keys. The integer `id` is internal and never leaves the backend.
@@ -109,7 +109,7 @@ The `BoardData` the API returns for those rows:
 ## Lifecycle
 
 1. On startup the backend creates the database file and its parent directory if they are missing, then runs the `CREATE TABLE IF NOT EXISTS` statements.
-2. It inserts the `user` row if it isn't there (`INSERT OR IGNORE`).
+2. It inserts the row for `APP_USERNAME` (the one account, from the environment) if it isn't there (`INSERT OR IGNORE`).
 3. On a user's first `GET /api/board`, if they have no board, the backend creates one from the default board. The default board moves from the frontend's `initialData` to the backend in Part 7.
 4. `PUT /api/board` validates the board and writes it as described under Mapping.
 

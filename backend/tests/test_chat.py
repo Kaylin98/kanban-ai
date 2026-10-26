@@ -45,6 +45,31 @@ def test_chat_requires_login(client, fake_ai):
     assert send(client).status_code == 401
 
 
+def test_chat_is_rate_limited(logged_in, fake_ai):
+    for _ in range(20):
+        assert send(logged_in).status_code == 200
+
+    response = send(logged_in)
+
+    assert response.status_code == 429
+    assert len(fake_ai.calls) == 20
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"message": "x" * 2001, "history": []},
+        {"message": "", "history": []},
+        {"message": "Hi", "history": [{"role": "user", "content": "x" * 4001}]},
+        {"message": "Hi", "history": HISTORY * 10 + HISTORY[:1]},
+    ],
+    ids=["long-message", "empty-message", "long-history-message", "long-history"],
+)
+def test_chat_rejects_oversized_requests(logged_in, fake_ai, body):
+    assert logged_in.post("/api/chat", json=body).status_code == 422
+    assert fake_ai.calls == []
+
+
 def test_prompt_has_board_history_and_message(logged_in, fake_ai):
     send(logged_in, "What is in Review?")
 

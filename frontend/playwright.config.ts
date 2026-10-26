@@ -4,7 +4,8 @@ import path from "node:path";
 
 // By default, builds the frontend and serves it with the backend on port 8001,
 // using a database in the temp directory. Set BASE_URL (e.g. http://localhost:8000)
-// to test a running container instead; the tests reset that user's board.
+// to test a running container instead, with E2E_USERNAME and E2E_PASSWORD set
+// to its credentials; the tests reset that user's board.
 const baseURL = process.env.BASE_URL;
 
 export default defineConfig({
@@ -26,7 +27,14 @@ export default defineConfig({
         command:
           "npm run build && uv run --directory ../backend uvicorn app.main:app --host 127.0.0.1 --port 8001",
         url: "http://127.0.0.1:8001/api/health",
-        env: { DATABASE_PATH: path.join(os.tmpdir(), "pm-e2e.db") },
+        env: {
+          DATABASE_PATH: path.join(os.tmpdir(), "pm-e2e.db"),
+          // Test-only credentials (see tests/credentials.ts); the hash is of "test-password".
+          APP_USERNAME: "test-user",
+          APP_PASSWORD_HASH:
+            "$argon2id$v=19$m=65536,t=3,p=4$/YZ21uVUpVm+RaqVQ/pmQQ$aF5JtnSMoSXvgO5rj8aLlkz0ZjtoTqD3k9R7YaqkX+s",
+          SESSION_SECRET: "e2e-test-secret-that-is-at-least-32-characters",
+        },
         reuseExistingServer: true,
         timeout: 180_000,
       },

@@ -5,7 +5,11 @@ import { saveBoard, sendChat } from "@/lib/api";
 import type { BoardData } from "@/lib/kanban";
 import { defaultBoard } from "@/test/board";
 
-vi.mock("@/lib/api", () => ({ saveBoard: vi.fn(), sendChat: vi.fn() }));
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api")>()),
+  saveBoard: vi.fn(),
+  sendChat: vi.fn(),
+}));
 
 const getFirstColumn = () => screen.getAllByTestId(/column-/i)[0];
 

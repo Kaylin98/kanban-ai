@@ -4,6 +4,7 @@ import pytest
 
 from app import db
 from app.board import DEFAULT_BOARD
+from conftest import USERNAME
 
 
 def updated_board() -> dict:
@@ -100,7 +101,7 @@ def test_invalid_board_is_rejected(logged_in, board):
 def test_boards_are_isolated_per_user(client):
     with closing(db.connect()) as conn, conn:
         other_id = conn.execute("INSERT INTO users (username) VALUES ('other')").lastrowid
-    user_id = db.get_user_id("user")
+    user_id = db.get_user_id(USERNAME)
 
     board = updated_board()
     db.save_board(user_id, DEFAULT_BOARD.model_validate(board))

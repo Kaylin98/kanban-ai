@@ -4,7 +4,7 @@ Each part has a checklist of substeps, the tests to write, and success criteria.
 
 ## Decisions
 
-- Auth: backend cookie session. FastAPI checks the hardcoded credentials (`user` / `password`) and sets a signed session cookie. The board API identifies the user from the cookie.
+- Auth: backend cookie session. FastAPI checks the credentials and sets a signed session cookie. The board API identifies the user from the cookie. Originally hardcoded (`user` / `password`); for public deployment (2026-10-26) they come from `APP_USERNAME` and an argon2 `APP_PASSWORD_HASH` in the environment, with rate limiting, security headers and Render support (see `docs/OVERVIEW.md`).
 - Database: SQLite with `users`, `boards`, `columns` and `cards` tables (see `docs/DATABASE.md`). The API sends and receives the board in the `BoardData` shape the frontend uses (`frontend/src/lib/kanban.ts`); the backend maps between rows and that shape.
 - Testing: aim for around 80% coverage where that is sensible, but only write tests that add real value. Falling short of 80% is fine; never add tests just to hit the number. This applies wherever a part below asks for "comprehensive" or "thorough" tests.
 - AI updates: the Structured Output returns a list of card operations (create / update / move / delete), decided at Part 9.

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { defaultBoard } from "../src/test/board";
+import { PASSWORD, USERNAME } from "./credentials";
 
 const cardIds = (page: Page, columnId: string) =>
   page
@@ -29,7 +30,7 @@ const boardSaved = (page: Page) =>
 // The board is stored on the server, so reset it to the default before each test.
 test.beforeEach(async ({ page }) => {
   await page.request.post("/api/login", {
-    data: { username: "user", password: "password" },
+    data: { username: USERNAME, password: PASSWORD },
   });
   await page.request.put("/api/board", { data: defaultBoard });
 });

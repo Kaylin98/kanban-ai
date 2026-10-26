@@ -102,6 +102,7 @@ describe("ChatWidget", () => {
 
   it.each([
     [502, "The assistant had trouble, try again."],
+    [429, "You have reached the hourly chat limit. Try again later."],
     [500, "The assistant could not complete that request. Try again."],
   ])("shows an error for a %i and restores the message", async (status, message) => {
     vi.mocked(sendChat).mockRejectedValue(new ChatRequestError(status));

@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { ChatRequestError, sendChat, type ChatMessage } from "@/lib/api";
+import { ChatRequestError, MAX_MESSAGE_LENGTH, sendChat, type ChatMessage } from "@/lib/api";
 import type { BoardData } from "@/lib/kanban";
 
 type ChatWidgetProps = {
@@ -48,10 +48,13 @@ export const ChatWidget = ({ onBoardUpdate }: ChatWidgetProps) => {
       // Drop the failed message from the history and put it back in the input to retry.
       setMessages(messages);
       setInput(message);
+      const status = error instanceof ChatRequestError ? error.status : null;
       setError(
-        error instanceof ChatRequestError && error.status === 502
+        status === 502
           ? "The assistant had trouble, try again."
-          : "The assistant could not complete that request. Try again."
+          : status === 429
+            ? "You have reached the hourly chat limit. Try again later."
+            : "The assistant could not complete that request. Try again."
       );
     } finally {
       setIsSending(false);
@@ -130,6 +133,7 @@ export const ChatWidget = ({ onBoardUpdate }: ChatWidgetProps) => {
               onKeyDown={handleKeyDown}
               placeholder="Message the assistant"
               aria-label="Message"
+              maxLength={MAX_MESSAGE_LENGTH}
               rows={2}
               className="min-w-0 flex-1 resize-none rounded-xl border border-[var(--stroke)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)] focus:bg-white"
             />

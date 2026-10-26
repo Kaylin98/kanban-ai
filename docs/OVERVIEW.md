@@ -20,7 +20,7 @@ This document describes the code as it is on `main` (last commit `0037dcb`, 2026
 10. [Running it](#10-running-it)
 11. [Testing](#11-testing)
 12. [Known limitations and issues](#12-known-limitations-and-issues)
-13. [Deployment](#13-deployment)
+13. [Deploying to Render](#13-deploying-to-render)
 14. [Roadmap](#14-roadmap)
 
 ---
@@ -314,7 +314,7 @@ erDiagram
 
 | Table | Purpose | Notes |
 |---|---|---|
-| `users` | One row per account. | No password column: credentials are hardcoded for the MVP. The `user` row is inserted at startup. |
+| `users` | One row per account. | No password column: the one account's password hash is in the environment (`APP_PASSWORD_HASH`). The `APP_USERNAME` row is inserted at startup. |
 | `boards` | One board per user. | `user_id` is `UNIQUE`; dropping that constraint would allow several boards per user. `updated_at` is set on every save. |
 | `columns` | The five columns of a board. | `key` is the id the frontend sees; `(board_id, key)` is unique; `position` orders the columns. |
 | `cards` | Cards in columns. | `key` is the frontend id; `position` orders cards within a column. Key uniqueness within a board is enforced by the Pydantic model, not the schema. |
@@ -645,12 +645,13 @@ The app refuses to start without the three required variables. If the page doesn
 **Start** builds the `pm-app` image, replaces any running `pm-app` container, and runs it with:
 
 ```bash
-docker run -d --name pm-app --env-file .env -p 8000:8000 -v pm-data:/app/data pm-app
+docker run -d --name pm-app --env-file .env -p 8000:8000 -v pm-data:/app/data \
+  -v "$PWD/certs:/app/certs:ro" pm-app
 ```
 
-Open **http://localhost:8000** and sign in with `user` / `password`.
+Open **http://localhost:8000** and sign in with your `APP_USERNAME` and password.
 
-- **Port:** 8000 (the container runs `uvicorn app.main:app --host 0.0.0.0 --port 8000`).
+- **Port:** 8000 (the container runs `uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}`).
 - **Data:** the SQLite file lives on the named volume `pm-data`, so the board survives restarts and rebuilds. `stop` removes the container but keeps the volume. To reset the board, run `docker volume rm pm-data` while the container is stopped.
 - **After a reboot:** start Docker Desktop first, then `docker start pm-app`. `start` also works, but it rebuilds the image.
 - **Logs:** `docker logs -f pm-app` shows requests, plus every AI operation and rejection.
@@ -660,8 +661,11 @@ Open **http://localhost:8000** and sign in with `user` / `password`.
 ```bash
 cd frontend && npm install && npm run build       # writes frontend/out
 cd ../backend && uv sync
+export APP_PASSWORD_HASH='<your hash>'           # single quotes keep the $ signs
 uv run --env-file ../.env uvicorn app.main:app --reload   # http://localhost:8000
 ```
+
+`uv run --env-file` expands `$...` in unquoted values, which mangles the argon2 hash in `.env` (the app then refuses to start). A variable already set in the shell takes precedence over the file, so export the hash in single quotes as above (PowerShell: `$env:APP_PASSWORD_HASH = '<your hash>'`).
 
 `npm run dev` starts the Next.js dev server on its own, but it has no backend, so sign-in doesn't work there.
 
@@ -672,8 +676,9 @@ Some antivirus products (Norton here) scan HTTPS by re-signing traffic with thei
 How the fix works:
 
 1. Norton sets the `NODE_EXTRA_CA_CERTS` environment variable on the host to its root certificate. If that variable points to a file, the start scripts copy it to `certs/extra-ca.pem`, which is gitignored.
-2. The Dockerfile builds `/app/ca-bundle.pem` from the system CAs (`/etc/ssl/certs/ca-certificates.crt`) plus any `certs/*.pem`, and sets `SSL_CERT_FILE` to it. The HTTP client the `openai` SDK uses (`httpx2`) honours `SSL_CERT_FILE`.
-3. With no extra cert, the bundle is just the system CAs, so nothing changes on other machines.
+2. The start scripts mount `certs/` read-only at `/app/certs`. It is never built into the image (`.dockerignore` excludes it).
+3. At container start, the `CMD` writes `/tmp/ca-bundle.pem` from the system CAs (`/etc/ssl/certs/ca-certificates.crt`) plus any `/app/certs/*.pem`, and `SSL_CERT_FILE` points to it. The HTTP client the `openai` SDK uses (`httpx2`) honours `SSL_CERT_FILE`.
+4. With no extra cert (or no mount, as on Render), the bundle is just the system CAs, so nothing changes on other machines.
 
 Verified in the container: a Norton-re-signed host returned 200 with the bundle and failed `CERTIFICATE_VERIFY_FAILED` without it. Separately, the Docker build itself needs `registry.npmjs.org` and `fonts.googleapis.com` excluded from HTTPS scanning, or `npm ci` and the font download fail.
 
@@ -687,8 +692,8 @@ Pass counts are from 2026-10-26 on Windows, without an API key in the shell.
 
 | Suite | Tool | Count | What it covers |
 |---|---|---|---|
-| Backend | pytest | 33 passed, 3 live skipped | Health and static index; login, logout and `/api/me`; board API auth, default board, save and read, persistence across a restart, 6 invalid-board cases, isolation between users; chat endpoint with a mocked AI: prompt contents, reply-only, all four operations, 6 invalid-operation cases rejected twice, correction on retry, the "move all to Done" copy bug, AI failures (cut-off, connection error, invalid JSON) returning 502 |
-| Frontend unit | Vitest + Testing Library | 20 passed | `moveCard` (reorder, move between columns, drop at end); `page.tsx` session and login flow; `KanbanBoard` rename, add, remove, edit, cancel, and showing an AI board without re-saving it; `ChatWidget` starts minimized and remembers, keeps the conversation while minimized, message and reply, history sent, loading state, `onBoardUpdate`, 502 and other error messages |
+| Backend | pytest | 51 passed, 3 live skipped | Health and static index; login, logout and `/api/me`; identical errors for wrong username and wrong password; cookie attributes; sign-in rate limit (including spoofed `X-Forwarded-For` in production); security headers and the CSP script hash; 500s without details; docs and `Secure` cookies in production mode; refusing to start without required or with invalid config (5 cases); chat rate limit and 4 oversized-request cases; board API auth, default board, save and read, persistence across a restart, 6 invalid-board cases, isolation between users; chat endpoint with a mocked AI: prompt contents, reply-only, all four operations, 6 invalid-operation cases rejected twice, correction on retry, the "move all to Done" copy bug, AI failures (cut-off, connection error, invalid JSON) returning 502 |
+| Frontend unit | Vitest + Testing Library | 23 passed | `moveCard` (reorder, move between columns, drop at end); `page.tsx` session and login flow, including the rate-limit message; `sendChat` sends only the last 20 history messages; `KanbanBoard` rename, add, remove, edit, cancel, and showing an AI board without re-saving it; `ChatWidget` starts minimized and remembers, keeps the conversation while minimized, message and reply, history sent, loading state, `onBoardUpdate`, 502, 429 and other error messages |
 | End to end | Playwright (Chromium) | 14 passed | Sign in, reload, sign out, wrong credentials; load the board, add, edit, delete, rename, drag between columns, three drop-position cases, Escape cancels a drag, every change survives a reload; chat with `/api/chat` mocked: reply shown, board updated, request body checked |
 
 ### Running the tests
@@ -703,7 +708,7 @@ npm run test:unit
 
 # End to end (from frontend/)
 npm run test:e2e                                  # builds the frontend, starts uvicorn on 127.0.0.1:8001
-BASE_URL=http://localhost:8000 npm run test:e2e   # against the running container (PowerShell: $env:BASE_URL="http://localhost:8000")
+BASE_URL=http://localhost:8000 E2E_USERNAME=... E2E_PASSWORD=... npm run test:e2e   # against the running container, with its credentials
 
 # Lint
 npm run lint
@@ -721,8 +726,9 @@ npm run lint
 
 ### Playwright notes
 
-- By default Playwright runs `npm run build`, then starts uvicorn on port 8001 with a temporary database (`pm-e2e.db` in the OS temp directory). It reuses a server already running on 8001, so stop any leftover dev server first.
-- With `BASE_URL`, the tests run against that server instead, and **they reset that user's board to the default**.
+- By default Playwright runs `npm run build`, then starts uvicorn on port 8001 with a temporary database (`pm-e2e.db` in the OS temp directory) and test-only credentials (`test-user` / `test-password`; the hash is in `playwright.config.ts`). It reuses a server already running on 8001, so stop any leftover dev server first.
+- With `BASE_URL`, the tests run against that server instead, signing in with `E2E_USERNAME` and `E2E_PASSWORD`, and **they reset that user's board to the default**. The wrong-credentials test counts as one failed sign-in towards the rate limit (5 per 15 minutes).
+- Backend tests use their own credentials too (`test-user` / `test-password`, hashed in `conftest.py`), and reset both rate limiters for each test.
 - `workers: 1` is required. Every spec signs in as the same user and resets that user's single board, so parallel specs overwrite each other. Parallel runs on Windows also triggered stalled page loads (see [section 12](#12-known-limitations-and-issues)).
 - The `/api/chat` route is mocked in the e2e chat test, so it never uses the AI quota.
 
@@ -742,8 +748,9 @@ npm run lint
 
 ### Data and sessions
 
-- **Chat history lives in the browser only.** It is lost on refresh and not shared across devices (a deliberate MVP decision). The whole history is sent with every message and there is no cap, so very long conversations make bigger prompts.
-- **Single hardcoded user.** The credentials are in code, and `SESSION_SECRET` falls back to `dev-secret`.
+- **Chat history lives in the browser only.** It is lost on refresh and not shared across devices (a deliberate MVP decision). Only the last 20 messages are sent, so the assistant forgets older parts of a long conversation.
+- **Single user.** One account from the environment. Sessions can't be revoked server-side before they expire, except by changing `SESSION_SECRET`, which signs everyone out.
+- **Rate limits are in memory.** They reset when the process restarts (on Render's free tier, after every spin-down). That still caps sign-in guessing at 5 per IP per 15 minutes while the service is up, and argon2 makes each guess slow.
 - **Whole-board writes, last write wins.** If you edit the board while an AI request is in progress, the AI's board (based on the board when you sent the message) replaces your newer edits.
 - **Silent save failures.** `saveBoard` ignores errors and `getBoard` doesn't check the status, so an expired session or a server error isn't shown to the user.
 
@@ -762,31 +769,47 @@ npm run lint
 
 ---
 
-## 13. Deployment
+## 13. Deploying to Render
 
-The app is one container, so it can run on any Docker host. These are notes for **Render's free tier** (checked against Render's documentation in October 2026). Nothing is deployed yet, and there is no deployment config in the repo.
+The app is one container, so it can run on any Docker host. These are notes for **Render's free tier** (checked against Render's documentation in October 2026). There is no deployment config in the repo; everything is set in the Render dashboard.
+
+### What keeps secrets out
+
+- `.env*` (except `.env.example`), `certs/`, databases, `node_modules`, `.venv` and test output are gitignored, and the git history (all 14 commits, plus unreachable local objects) was scanned on 2026-10-26 with no keys, `.env` files or certificates found.
+- `.dockerignore` excludes `.env*`, `certs/`, `*.db`, `.git`, `node_modules`, `.venv`, `__pycache__`, test output and `backend/tests`. The built image was inspected on 2026-10-26: no `.env` files, no `/app/certs`, no extra certificates, and no secrets in the image config or layer history.
+- Secrets reach the app only as environment variables set in the Render dashboard.
 
 ### Steps
 
-1. Push the repo to GitHub (`.env` is gitignored and excluded from the Docker build, so no secrets go with it).
-2. In Render, create a **Web Service** from the repo with the **Docker** runtime. Render builds the root `Dockerfile`.
-3. Set environment variables in the Render dashboard:
+1. Generate the secrets locally:
+   ```bash
+   uv run scripts/hash_password.py                                 # prints APP_PASSWORD_HASH
+   python -c "import secrets; print(secrets.token_urlsafe(32))"    # prints SESSION_SECRET
+   ```
+2. Push the repo to GitHub.
+3. In Render, create a **Web Service** from the repo with the **Docker** runtime and the **Free** instance type. Render builds the root `Dockerfile`.
+4. Set environment variables in the Render dashboard (paste the hash as is, without quotes):
 
    | Name | Value |
    |---|---|
-   | `OPENROUTER_API_KEY` | Your key |
-   | `SESSION_SECRET` | A long random string (don't rely on the `dev-secret` default) |
-   | `PORT` | `8000` |
-   | `OPENROUTER_MODEL` | Optional |
+   | `ENV` | `production` |
+   | `APP_USERNAME` | Your username |
+   | `APP_PASSWORD_HASH` | Output of `hash_password.py` |
+   | `SESSION_SECRET` | Output of `token_urlsafe(32)` |
+   | `OPENROUTER_API_KEY` | Your OpenRouter key |
+   | `OPENROUTER_MODEL` | Optional; defaults to `dots-studio/dots-3-note-preview:free` |
 
-   `PORT=8000` is needed because the Dockerfile always starts uvicorn on port 8000, and Render expects the service on `$PORT`, which defaults to 10000.
-4. Set the **health check path** to `/api/health`.
-5. The `certs/` directory only holds `.gitkeep` in the repo, so the CA bundle is just the system CAs, which is right for Render.
+   Don't set `PORT`: Render sets it, and the container listens on it.
+5. Set the **health check path** to `/api/health`.
+6. After the first deploy, check:
+   - The deploy log shows `Uvicorn running`, not `Missing required environment variables`.
+   - `https://<service>.onrender.com/docs` returns 404, and the `session` cookie is `Secure` (browser dev tools).
+   - **The sign-in rate limit is per client.** Fail to sign in 6 times from your computer, then sign in from a different network (for example a phone on mobile data). The phone should get in. If it is also blocked, Render added another proxy hop, and the last `X-Forwarded-For` entry is a shared proxy address rather than the client. Rate limiting then still works but is shared between users, and `client_ip` in `security.py` needs the second-to-last entry. Render doesn't document its proxy chain, so this is the one assumption to confirm.
 
 ### What to expect on the free tier
 
 - **Ephemeral storage.** Free web services can't attach persistent disks, and the local filesystem is wiped on every deploy, restart and spin-down. The SQLite file is recreated at startup, so **the board resets to the default eight cards** whenever that happens. This is fine for a demo, not for real use.
-- **Spin-down.** After 15 minutes without traffic the service stops, and the next request takes about a minute to start it again. A spin-down also wipes the data.
+- **Spin-down.** After 15 minutes without traffic the service stops, and the next request takes about a minute to start it again. A spin-down also wipes the data and resets the rate limits. Sessions survive it, because they live in the signed cookie.
 - **Hours.** 750 free instance hours per workspace per month. Spun-down time doesn't count.
 - **One instance.** That suits SQLite, which shouldn't be shared between instances anyway.
 
@@ -794,8 +817,6 @@ The app is one container, so it can run on any Docker host. These are notes for 
 
 - A paid Render instance with a **persistent disk** mounted at `/app/data` keeps the SQLite file. `DATABASE_PATH` can point anywhere on the disk.
 - Or move to a hosted database. That needs code changes, because `db.py` uses `sqlite3` directly.
-
-Also consider setting `https_only=True` on `SessionMiddleware` once the app is only served over HTTPS. That is a one-line change, not made yet.
 
 ---
 
@@ -826,19 +847,18 @@ The project followed a ten-part plan in [PLAN.md](PLAN.md):
 
 From the limitations in [AGENTS.md](../AGENTS.md), where the MVP deliberately stops short. None of this is built:
 
-- **Planned:** multiple users with real sign-in. The database is ready (per-user boards are already isolated). Registration and password storage are not built.
+- **Planned:** multiple users with real sign-in. The database is ready (per-user boards are already isolated). Registration and per-user password storage are not built.
 - **Planned:** more than one board per user. This needs the `UNIQUE` constraint on `boards.user_id` dropped, plus API and UI changes.
-- **Planned:** hosting beyond a local Docker container. The MVP is scoped to local only; [section 13](#13-deployment) covers what a hosted deployment needs.
+
+Hosting beyond a local Docker container, originally out of scope for the MVP, is now prepared for Render (see [section 13](#13-deploying-to-render)).
 
 ### Suggested next steps
 
 These are suggestions from this review. They are not in the plan.
 
 1. Show save failures and expired sessions in the UI instead of failing silently.
-2. Require `SESSION_SECRET` in production and set `https_only` on the session cookie.
-3. Read the port from `$PORT` in the Dockerfile `CMD`, so hosts like Render work without extra config.
-4. Cap the chat history sent to the model (for example the last 20 messages).
-5. Add a keyboard sensor for drag and drop, and test touch dragging.
-6. Validate `move` positions: today any integer is accepted and passed to Python's `list.insert`, so a negative position counts from the end and a too-large one appends.
-7. Use a persistent disk or hosted database for any real deployment.
-8. Let the AI rename columns, since users can.
+2. Add a keyboard sensor for drag and drop, and test touch dragging.
+3. Validate `move` positions: today any integer is accepted and passed to Python's `list.insert`, so a negative position counts from the end and a too-large one appends.
+4. Use a persistent disk or hosted database for any real deployment.
+5. Let the AI rename columns, since users can.
+6. Run the container as a non-root user. Not done yet because the existing `pm-data` volume is owned by root, so local data would need migrating.

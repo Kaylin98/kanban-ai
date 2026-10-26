@@ -188,3 +188,8 @@ playwright-report/
 # Extra CA certs copied in by scripts/start (e.g. Norton)
 certs/*
 !certs/.gitkeep
+
+# Secrets: every .env file except the template
+.env*
+!.env.example
+*.db-journal

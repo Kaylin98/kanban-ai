@@ -1,19 +1,25 @@
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.board import Board, Card
+
+# Caps on what a chat request can send to the model. The frontend sends only the last
+# MAX_HISTORY messages.
+MAX_MESSAGE_LENGTH = 2000
+MAX_HISTORY = 20
 
 
 class Message(BaseModel):
     role: Literal["user", "assistant"]
-    content: str
+    # Longer than a new message, since it can be an assistant reply.
+    content: str = Field(max_length=2 * MAX_MESSAGE_LENGTH)
 
 
 class ChatRequest(BaseModel):
-    message: str
-    history: list[Message]
+    message: str = Field(min_length=1, max_length=MAX_MESSAGE_LENGTH)
+    history: list[Message] = Field(max_length=MAX_HISTORY)
 
 
 # Each operation's discriminator is `action` because it sorts before the other keys.
